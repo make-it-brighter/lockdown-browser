@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+<title>Secure Exam Environment</title>
+<style>
+  /* Arial only — no external font imports */
+  :root {
+    --bg: #0d0f12;
+    --surface: #13161b;
+    --surface2: #1a1e25;
+    --border: #252930;
+    --border-bright: #353b45;
+    --text: #e8eaed;
+    --text-muted: #7a8390;
+    --text-dim: #4a5260;
+    --accent: #4a9eff;
+    --warn: #f0a500;
+    --warn-dim: #3a2800;
+    --danger: #e53e3e;
+    --danger-dim: #2d0f0f;
+    --success: #38a169;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: Arial, sans-serif; min-height: 100vh;
+    overflow-x: hidden; user-select: none;
+  }
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* SETUP */
+  #setup-screen { flex-direction: column; align-items: center; padding: 60px 24px 80px; }
+  .setup-header { text-align: center; margin-bottom: 48px; }
+  .setup-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 6px 14px; font-size: 11px;
+    color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 24px;
+  }
+  .setup-badge::before {
+    content: ''; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%; animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .setup-title { font-size: 26px; font-weight: bold; margin-bottom: 8px; }
+  .setup-sub { font-size: 14px; color: var(--text-muted); }
+  .setup-form { width: 100%; max-width: 600px; }
+  .form-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin-bottom: 16px;
+  }
+  .form-section-title {
+    font-size: 10px; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-muted); padding: 12px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .form-group { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .form-group:last-child { border-bottom: none; }
+  .form-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .form-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 10px 14px; color: var(--text);
+    font-family: Arial, sans-serif; font-size: 14px; outline: none;
+    transition: border-color 0.15s; user-select: text; -webkit-user-select: text;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--text-dim); }
+  .form-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  #questions-container { display: flex; flex-direction: column; }
+  .question-entry { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .question-entry:last-child { border-bottom: none; }
+  .question-label { font-size: 11px; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.05em; }
+  textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
+  .btn-primary {
+    background: var(--accent); color: #fff; width: 100%; padding: 16px;
+    font-family: Arial, sans-serif; font-size: 14px; font-weight: bold;
+    letter-spacing: 0.06em; border: none; border-radius: 4px;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s;
+  }
+  .btn-primary:hover { background: #3a8eef; transform: translateY(-1px); }
+  .add-question-btn {
+    margin: 12px 20px; background: transparent; border: 1px dashed var(--border-bright);
+    color: var(--text-muted); font-family: Arial, sans-serif; font-size: 12px;
+    letter-spacing: 0.05em; padding: 10px; cursor: pointer;
+    width: calc(100% - 40px); border-radius: 4px; transition: all 0.15s;
+  }
+  .add-question-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* EXAM */
+  #exam-screen { flex-direction: column; }
+  .banner { display: none; padding: 10px 32px; font-size: 12px; letter-spacing: 0.05em; text-align: center; font-weight: bold; }
+  .banner.active { display: block; }
+  .banner-warn { background: var(--warn-dim); border-bottom: 1px solid var(--warn); color: var(--warn); }
+  .banner-danger { background: var(--danger-dim); border-bottom: 1px solid var(--danger); color: var(--danger); }
+  .banner-fullscreen { background: #2d1a00; border-bottom: 1px solid #ff8c00; color: #ff8c00; }
+  .exam-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 56px; background: var(--surface);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; flex-shrink: 0;
+  }
+  .exam-title-bar { display: flex; align-items: center; gap: 16px; }
+  .lockdown-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--danger-dim); border: 1px solid var(--danger); border-radius: 3px;
+    padding: 4px 10px; font-size: 10px; color: var(--danger); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .lockdown-badge::before {
+    content: ''; width: 5px; height: 5px;
+    background: var(--danger); border-radius: 50%; animation: pulse 1s infinite;
+  }
+  .exam-name { font-size: 13px; color: var(--text-muted); }
+  .exam-timer { font-size: 22px; font-weight: bold; color: var(--text); transition: color 0.3s; }
+  .exam-timer.warn { color: var(--warn); }
+  .exam-timer.danger { color: var(--danger); animation: flash 0.5s infinite; }
+  @keyframes flash { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .exam-body { flex: 1; display: flex; flex-direction: column; max-width: 800px; margin: 0 auto; width: 100%; padding: 40px 32px; }
+  .question-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+  .progress-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .progress-dots { display: flex; gap: 6px; }
+  .progress-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-bright); transition: background 0.2s; }
+  .progress-dot.answered { background: var(--success); }
+  .progress-dot.current { background: var(--accent); }
+  .question-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+  .question-header { padding: 16px 24px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .question-num { font-size: 11px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+  .question-text { font-size: 15px; color: var(--text); line-height: 1.6; padding: 20px 24px; }
+  .answer-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; padding: 0 24px 8px; }
+  .answer-textarea {
+    width: 100%; min-height: 280px; background: var(--bg);
+    border: none; border-top: 1px solid var(--border);
+    color: var(--text); font-family: Arial, sans-serif; font-size: 15px;
+    line-height: 1.8; padding: 20px 24px; outline: none; resize: vertical;
+    user-select: text; -webkit-user-select: text;
+  }
+  .answer-textarea::placeholder { color: var(--text-dim); }
+  .exam-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .nav-btn {
+    font-family: Arial, sans-serif; font-size: 12px; letter-spacing: 0.06em;
+    padding: 10px 20px; border-radius: 4px; cursor: pointer; text-transform: uppercase;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); transition: all 0.15s;
+  }
+  .nav-btn:hover:not(:disabled) { border-color: var(--border-bright); color: var(--text); }
+  .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .submit-btn {
+    background: var(--danger); border: none; color: white;
+    font-family: Arial, sans-serif; font-size: 12px; font-weight: bold;
+    letter-spacing: 0.1em; padding: 10px 24px; border-radius: 4px;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s;
+  }
+  .submit-btn:hover { background: #c53030; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--danger);
+    border-radius: 8px; padding: 40px; max-width: 440px; width: 90%;
+    text-align: center; box-shadow: 0 0 60px rgba(229,62,62,0.2);
+  }
+  .modal-icon { font-size: 36px; margin-bottom: 16px; }
+  .modal-title { font-size: 18px; font-weight: bold; color: var(--danger); margin-bottom: 8px; }
+  .modal-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+  .modal-countdown { font-size: 48px; font-weight: bold; color: var(--danger); margin-bottom: 24px; animation: flash 0.5s infinite; }
+  .modal-submit-btn {
+    background: var(--danger); color: white; border: none; border-radius: 4px;
+    padding: 14px 32px; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold;
+    letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; width: 100%;
+  }
+  .modal-submit-btn:hover { background: #c53030; }
+
+  /* SUBMISSION */
+  #submission-screen { flex-direction: column; align-items: center; padding: 60px 24px 80px; }
+  .submission-header { text-align: center; margin-bottom: 48px; max-width: 600px; }
+  .submission-icon { font-size: 48px; margin-bottom: 16px; }
+  .submission-title { font-size: 24px; font-weight: bold; color: var(--success); margin-bottom: 8px; }
+  .submission-meta { font-size: 12px; color: var(--text-muted); line-height: 2; white-space: pre-line; }
+  .download-section { width: 100%; max-width: 600px; margin-bottom: 40px; }
+  .download-btn {
+    width: 100%; background: var(--accent); color: white; border: none; border-radius: 6px;
+    padding: 18px; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold;
+    letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .download-btn:hover { background: #3a8eef; transform: translateY(-1px); }
+  .answer-review { width: 100%; max-width: 600px; }
+  .review-section-title {
+    font-size: 10px; color: var(--text-muted); letter-spacing: 0.12em; text-transform: uppercase;
+    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .review-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .review-q { padding: 16px 20px; background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text); line-height: 1.6; }
+  .review-q-label { font-size: 10px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .review-a { padding: 16px 20px; font-size: 14px; color: var(--text-muted); line-height: 1.8; white-space: pre-wrap; min-height: 60px; }
+  .review-a-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .new-exam-btn {
+    margin-top: 32px; background: transparent; border: 1px solid var(--border-bright);
+    color: var(--text-muted); border-radius: 4px; padding: 12px 32px;
+    font-family: Arial, sans-serif; font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+  }
+  .new-exam-btn:hover { color: var(--text); border-color: var(--text); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen" class="screen active">
+  <div class="setup-header">
+    <div class="setup-badge">Secure Exam Environment</div>
+    <h1 class="setup-title">Exam Configuration</h1>
+    <p class="setup-sub">Set up your session before entering lockdown mode</p>
+  </div>
+  <div class="setup-form">
+    <div class="form-section">
+      <div class="form-section-title">Exam Details</div>
+      <div class="form-group">
+        <label class="form-label">Exam Title</label>
+        <input type="text" class="form-input" id="exam-title"
+          placeholder="e.g. Contract Law — Mid-Term Assessment"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" />
+      </div>
+      <div class="form-row">
+        <div>
+          <label class="form-label">Duration (minutes)</label>
+          <input type="number" class="form-input" id="exam-duration" min="1" value="60" />
+        </div>
+        <div>
+          <label class="form-label">Number of Questions</label>
+          <input type="number" class="form-input" id="num-questions" min="1" max="20" value="3" />
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
+      <div class="form-section-title">Question Prompts</div>
+      <div id="questions-container"></div>
+      <button class="add-question-btn" onclick="addQuestion()">+ Add Question</button>
+    </div>
+    <button class="btn-primary" onclick="startExam()">&#9632; Enter Lockdown &amp; Start Exam</button>
+  </div>
+</div>
+
+<!-- EXAM SCREEN -->
+<div id="exam-screen" class="screen">
+  <div id="banner-fullscreen" class="banner banner-fullscreen">&#9888; FULLSCREEN EXITED — Click anywhere to restore fullscreen immediately</div>
+  <div id="banner-5min" class="banner banner-warn">&#9200; 5 MINUTES REMAINING</div>
+  <div id="banner-1min" class="banner banner-danger">&#9888; 1 MINUTE REMAINING — Finalise your answers</div>
+  <div class="exam-topbar">
+    <div class="exam-title-bar">
+      <div class="lockdown-badge">Lockdown Active</div>
+      <span class="exam-name" id="topbar-title"></span>
+    </div>
+    <div class="exam-timer" id="timer-display">00:00</div>
+  </div>
+  <div class="exam-body">
+    <div class="question-progress">
+      <span class="progress-label" id="progress-label">Question 1 of 3</span>
+      <div class="progress-dots" id="progress-dots"></div>
+    </div>
+    <div class="question-block">
+      <div class="question-header">
+        <span class="question-num" id="question-num-label">Q1</span>
+        <span style="font-size:12px;color:var(--text-dim);">ESSAY / LONG ANSWER</span>
+      </div>
+      <div class="question-text" id="question-display"></div>
+      <div class="answer-label">Your Answer</div>
+      <textarea class="answer-textarea" id="answer-textarea"
+        placeholder="Begin writing your answer here..."
+        spellcheck="false"
+        autocorrect="off"
+        autocapitalize="off"
+        autocomplete="off"
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"></textarea>
+    </div>
+    <div class="exam-nav">
+      <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
+      <button class="submit-btn" onclick="confirmSubmit()">Submit Exam</button>
+      <button class="nav-btn" id="next-btn" onclick="navigate(1)">Next &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="autosubmit-modal">
+  <div class="modal">
+    <div class="modal-icon">&#9200;</div>
+    <div class="modal-title">TIME ALMOST UP</div>
+    <div class="modal-sub">Your exam will be automatically submitted in</div>
+    <div class="modal-countdown" id="modal-countdown">30</div>
+    <button class="modal-submit-btn" onclick="submitExam()">Submit Now</button>
+  </div>
+</div>
+
+<!-- SUBMISSION SCREEN -->
+<div id="submission-screen" class="screen">
+  <div class="submission-header">
+    <div class="submission-icon">&#10003;</div>
+    <div class="submission-title">Exam Submitted</div>
+    <div class="submission-meta" id="submission-meta"></div>
+  </div>
+  <div class="download-section">
+    <button class="download-btn" onclick="downloadDocx()">&#8595; Download Answers as Word Document (.docx)</button>
+  </div>
+  <div class="answer-review">
+    <div class="review-section-title">Answer Review</div>
+    <div id="review-container"></div>
+  </div>
+  <button class="new-exam-btn" onclick="newExam()">&#8635; New Exam Session</button>
+</div>
+
+<script>
+// ── State ──
+var S = {
+  title:'', duration:60, questions:[], answers:[],
+  currentQ:0, timerInterval:null, secondsLeft:0,
+  submitted:false, startTime:null,
+  showed5min:false, showed1min:false, showed30s:false
+};
+
+// ── Setup ──
+function buildQuestionInputs(n) {
+  var c = document.getElementById('questions-container');
+  while (c.querySelectorAll('.question-entry').length < n) {
+    var i = c.querySelectorAll('.question-entry').length;
+    var d = document.createElement('div');
+    d.className = 'question-entry';
+    d.innerHTML = '<div class="question-label">QUESTION '+(i+1)+'</div>'+
+      '<textarea class="form-input" rows="3" placeholder="Type your question prompt here..." '+
+      'spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>';
+    c.appendChild(d);
+  }
+  while (c.querySelectorAll('.question-entry').length > n)
+    c.removeChild(c.lastElementChild);
+}
+
+document.getElementById('num-questions').addEventListener('input', function(){
+  buildQuestionInputs(Math.max(1,Math.min(20,parseInt(this.value)||1)));
+});
+
+function addQuestion(){
+  var inp = document.getElementById('num-questions');
+  inp.value = (parseInt(inp.value)||1)+1;
+  buildQuestionInputs(parseInt(inp.value));
+}
+
+buildQuestionInputs(3);
+
+function startExam(){
+  S.title = document.getElementById('exam-title').value.trim()||'Untitled Exam';
+  S.duration = Math.max(1,parseInt(document.getElementById('exam-duration').value)||60);
+  S.questions = Array.from(document.querySelectorAll('#questions-container textarea'))
+    .map(function(t,i){return t.value.trim()||('Question '+(i+1));});
+  S.answers = new Array(S.questions.length).fill('');
+  S.currentQ=0; S.secondsLeft=S.duration*60; S.submitted=false;
+  S.startTime=new Date(); S.showed5min=S.showed1min=S.showed30s=false;
+  showScreen('exam-screen');
+  document.getElementById('topbar-title').textContent=S.title;
+  buildDots(); renderQ(); startTimer();
+  requestFs(); lockdown();
+}
+
+// ── Lockdown ──
+var ldInit=false;
+function lockdown(){
+  if(ldInit)return; ldInit=true;
+  document.addEventListener('contextmenu',function(e){e.preventDefault();});
+  document.addEventListener('keydown',function(e){
+    if((e.ctrlKey&&['c','x','v','t','w','n','p'].indexOf(e.key.toLowerCase())>-1)||
+       e.key==='F12'||(e.ctrlKey&&e.shiftKey&&['i','j','c'].indexOf(e.key.toLowerCase())>-1)||
+       (e.ctrlKey&&e.key==='Tab')||(e.altKey&&e.key==='F4')) e.preventDefault();
+  });
+  document.addEventListener('fullscreenchange',function(){
+    if(!S.submitted)
+      document.getElementById('banner-fullscreen').classList.toggle('active',!document.fullscreenElement);
+  });
+  document.addEventListener('click',function(){
+    if(!document.fullscreenElement&&!S.submitted) requestFs();
+  });
+}
+
+function requestFs(){
+  var e=document.documentElement;
+  if(e.requestFullscreen) e.requestFullscreen().catch(function(){});
+  else if(e.webkitRequestFullscreen) e.webkitRequestFullscreen();
+}
+
+// ── Timer ──
+function startTimer(){
+  // grab the element once; if it's not available something went wrong earlier
+  var el = document.getElementById('timer-display');
+  if (!el) {
+    console.error('timer-display element not found when starting timer');
+    return;
+  }
+  S.timerEl = el;
+
+  updateTimer();
+  S.timerInterval = setInterval(function(){
+    S.secondsLeft--;
+    updateTimer(); checkWarnings();
+    if(S.secondsLeft<=0){clearInterval(S.timerInterval);submitExam();}
+  },1000);
+}
+
+function updateTimer(){
+  var s = S.secondsLeft, m = Math.floor(s/60), sec = s%60;
+  var el = S.timerEl || document.getElementById('timer-display');
+  if (!el) return; // element removed or not yet in DOM
+
+  el.textContent = pad(m) + ':' + pad(sec);
+  el.className = 'exam-timer';
+  if (s <= 60) el.classList.add('danger');
+  else if (s <= 300) el.classList.add('warn');
+}
+
+function pad(n){return String(n).padStart(2,'0');}
+
+function checkWarnings(){
+  var s=S.secondsLeft;
+  if(s<=300&&!S.showed5min){S.showed5min=true;showBanner('banner-5min',8000);}
+  if(s<=60&&!S.showed1min){S.showed1min=true;showBanner('banner-1min',10000);}
+  if(s<=30&&!S.showed30s){S.showed30s=true;document.getElementById('autosubmit-modal').classList.add('active');}
+  if(S.showed30s&&s>0) document.getElementById('modal-countdown').textContent=s;
+}
+
+function showBanner(id,dur){
+  var b=document.getElementById(id); b.classList.add('active');
+  setTimeout(function(){b.classList.remove('active');},dur);
+}
+
+// ── Navigation ──
+function saveAns(){S.answers[S.currentQ]=document.getElementById('answer-textarea').value;}
+
+function navigate(dir){
+  saveAns();
+  var next=S.currentQ+dir;
+  if(next<0||next>=S.questions.length)return;
+  S.currentQ=next; renderQ();
+}
+
+function renderQ(){
+  var q=S.currentQ;
+  document.getElementById('question-num-label').textContent='Q'+(q+1);
+  document.getElementById('question-display').textContent=S.questions[q];
+  document.getElementById('answer-textarea').value=S.answers[q];
+  document.getElementById('progress-label').textContent='Question '+(q+1)+' of '+S.questions.length;
+  document.getElementById('prev-btn').disabled=q===0;
+  document.getElementById('next-btn').disabled=q===S.questions.length-1;
+  updateDots();
+}
+
+function buildDots(){
+  var c=document.getElementById('progress-dots'); c.innerHTML='';
+  S.questions.forEach(function(_,i){
+    var d=document.createElement('div'); d.className='progress-dot'; d.id='dot-'+i; c.appendChild(d);
+  });
+  updateDots();
+}
+
+function updateDots(){
+  S.questions.forEach(function(_,i){
+    var d=document.getElementById('dot-'+i); d.className='progress-dot';
+    if(i===S.currentQ) d.classList.add('current');
+    else if(S.answers[i]&&S.answers[i].trim()) d.classList.add('answered');
+  });
+}
+
+function confirmSubmit(){
+  if(confirm('Are you sure you want to submit your exam? This action cannot be undone.')) submitExam();
+}
+
+// ── Submit ──
+function submitExam(){
+  if(S.submitted)return;
+  S.submitted=true; saveAns(); clearInterval(S.timerInterval);
+  document.getElementById('autosubmit-modal').classList.remove('active');
+  if(document.fullscreenElement) document.exitFullscreen().catch(function(){});
+  buildSubScreen(); showScreen('submission-screen');
+}
+
+function buildSubScreen(){
+  var now=new Date();
+  var ts=now.toLocaleString('en-SG',{dateStyle:'long',timeStyle:'short'});
+  var used=Math.ceil((now-S.startTime)/60000);
+  document.getElementById('submission-meta').textContent=
+    S.title+'\nSubmitted: '+ts+'\nDuration used: '+used+' min of '+S.duration+' min';
+  var c=document.getElementById('review-container'); c.innerHTML='';
+  S.questions.forEach(function(q,i){
+    var item=document.createElement('div'); item.className='review-item';
+    var ans=S.answers[i]||'<span style="color:var(--text-dim);font-style:italic">No answer provided</span>';
+    item.innerHTML='<div class="review-q"><div class="review-q-label">Question '+(i+1)+'</div>'+esc(q)+'</div>'+
+      '<div class="review-a"><div class="review-a-label">Answer</div>'+
+      (S.answers[i]?esc(S.answers[i]):'<span style="color:var(--text-dim);font-style:italic">No answer provided</span>')+
+      '</div>';
+    c.appendChild(item);
+  });
+}
+
+function esc(s){
+  if(!s)return'';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// ── DOCX download (pure JS, zero dependencies) ──
+function downloadDocx(){
+  try {
+    var now=new Date();
+    var ts=now.toLocaleString('en-SG',{dateStyle:'long',timeStyle:'short'});
+    var used=Math.ceil((now-S.startTime)/60000);
+
+    var body='';
+    // Title
+    body+=wp(wr(xe(S.title),{sz:36,bold:true,color:'1A1A2E'}),{spaceAfter:80});
+    body+=wp(wr('Submitted: '+xe(ts)+'     |     Duration: '+used+' min used of '+S.duration+' min',{sz:20,color:'666666',italic:true}),{spaceAfter:40});
+    body+=wp(wr('Total Questions: '+S.questions.length,{sz:18,color:'999999'}),{spaceAfter:40,borderBottom:true});
+    body+=wp(wr(' ',{sz:22}),{spaceAfter:160});
+
+    S.questions.forEach(function(q,i){
+      body+=wp(wr('Question '+(i+1),{sz:26,bold:true,color:'0F3460'}),{spaceBefore:240,spaceAfter:80});
+      body+=wp(wr(xe(q),{sz:22,color:'1A1A2E'}),{spaceAfter:160});
+      body+=wp(wr('Answer',{sz:20,bold:true,italic:true,color:'666666'}),{spaceAfter:80});
+      var ans=(S.answers[i]&&S.answers[i].trim())?S.answers[i]:'(No answer provided)';
+      ans.split('\n').forEach(function(line){
+        body+=wp(wr(xe(line||' '),{sz:22,color:'111111'}),{spaceAfter:80});
+      });
+      if(i<S.questions.length-1)
+        body+=wp(wr(' ',{sz:22}),{spaceBefore:200,spaceAfter:0,borderBottom:true});
+    });
+
+    body+=wp(wr(' ',{sz:22}),{spaceAfter:80});
+    body+=wp(wr('Generated by Secure Exam Environment \u2014 '+xe(ts),{sz:16,italic:true,color:'AAAAAA'}),{spaceBefore:240,align:'center'});
+
+    var docXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"'+
+      ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'+
+      ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+      '<w:body>'+body+
+      '<w:sectPr>'+
+      '<w:pgSz w:w="12240" w:h="15840"/>'+
+      '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>'+
+      '</w:sectPr></w:body></w:document>';
+
+    var styleXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
+      '<w:docDefaults><w:rPrDefault><w:rPr>'+
+      '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'+
+      '<w:sz w:val="24"/><w:szCs w:val="24"/>'+
+      '</w:rPr></w:rPrDefault></w:docDefaults></w:styles>';
+
+    var files={
+      '[Content_Types].xml':
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+        '<Default Extension="xml" ContentType="application/xml"/>'+
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
+        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
+        '</Types>',
+      '_rels/.rels':
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'+
+        '</Relationships>',
+      'word/document.xml': docXml,
+      'word/styles.xml': styleXml,
+      'word/_rels/document.xml.rels':
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+        '</Relationships>'
+    };
+
+    var zip=buildZip(files);
+    var blob=new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download=(S.title.replace(/[^a-z0-9]/gi,'_').substring(0,40)||'Exam')+'_Answers.docx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){document.body.removeChild(a); URL.revokeObjectURL(url);},3000);
+  } catch(err) {
+    alert('Download failed: '+err.message+'\n\nPlease try again or use a different browser.');
+  }
+}
+
+function xe(s){
+  if(!s)return'';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// paragraph helper
+function wp(content, opts){
+  opts=opts||{};
+  var pPr='<w:pPr>';
+  var sa=opts.spaceAfter!==undefined?opts.spaceAfter:160;
+  var sb=opts.spaceBefore||0;
+  pPr+='<w:spacing w:before="'+sb+'" w:after="'+sa+'"/>';
+  if(opts.align) pPr+='<w:jc w:val="'+opts.align+'"/>';
+  if(opts.borderBottom) pPr+='<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="CCCCCC"/></w:pBdr>';
+  pPr+='</w:pPr>';
+  return '<w:p>'+pPr+(content||'')+'</w:p>';
+}
+
+// run helper
+function wr(text, opts){
+  opts=opts||{};
+  var rPr='<w:rPr>'+
+    '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'+
+    '<w:sz w:val="'+(opts.sz||24)+'"/><w:szCs w:val="'+(opts.sz||24)+'"/>';
+  if(opts.bold) rPr+='<w:b/><w:bCs/>';
+  if(opts.italic) rPr+='<w:i/><w:iCs/>';
+  if(opts.color) rPr+='<w:color w:val="'+opts.color+'"/>';
+  rPr+='</w:rPr>';
+  return '<w:r>'+rPr+'<w:t xml:space="preserve">'+text+'</w:t></w:r>';
+}
+
+// ── ZIP builder ──
+function buildZip(files){
+  var entries=[],central=[],offset=0;
+  Object.keys(files).forEach(function(name){
+    var data=toBytes(files[name]);
+    var nb=toBytes(name);
+    var crc=crc32b(data);
+    var dd=dosDate();
+    var lh=[];
+    u32(lh,0x04034b50);u16(lh,20);u16(lh,0);u16(lh,0);
+    u16(lh,dd.t);u16(lh,dd.d);
+    u32(lh,crc);u32(lh,data.length);u32(lh,data.length);
+    u16(lh,nb.length);u16(lh,0);
+    nb.forEach(function(b){lh.push(b);});
+    data.forEach(function(b){lh.push(b);});
+    var cd=[];
+    u32(cd,0x02014b50);u16(cd,20);u16(cd,20);u16(cd,0);u16(cd,0);
+    u16(cd,dd.t);u16(cd,dd.d);
+    u32(cd,crc);u32(cd,data.length);u32(cd,data.length);
+    u16(cd,nb.length);u16(cd,0);u16(cd,0);u16(cd,0);u16(cd,0);
+    u32(cd,0);u32(cd,offset);
+    nb.forEach(function(b){cd.push(b);});
+    entries.push(lh);central.push(cd);offset+=lh.length;
+  });
+  var cs=offset,cf=[];
+  central.forEach(function(c){c.forEach(function(b){cf.push(b);});});
+  var eocd=[];
+  u32(eocd,0x06054b50);u16(eocd,0);u16(eocd,0);
+  u16(eocd,central.length);u16(eocd,central.length);
+  u32(eocd,cf.length);u32(eocd,cs);u16(eocd,0);
+  var all=[];
+  entries.forEach(function(e){e.forEach(function(b){all.push(b);});});
+  cf.forEach(function(b){all.push(b);});
+  eocd.forEach(function(b){all.push(b);});
+  return new Uint8Array(all);
+}
+
+function toBytes(s){
+  var r=[];
+  for(var i=0;i<s.length;i++){
+    var c=s.charCodeAt(i);
+    if(c<128) r.push(c);
+    else if(c<2048) r.push(0xC0|(c>>6),0x80|(c&0x3F));
+    else r.push(0xE0|(c>>12),0x80|((c>>6)&0x3F),0x80|(c&0x3F));
+  }
+  return r;
+}
+
+function u16(a,v){a.push(v&0xFF,(v>>8)&0xFF);}
+function u32(a,v){a.push(v&0xFF,(v>>8)&0xFF,(v>>16)&0xFF,(v>>24)&0xFF);}
+
+function dosDate(){
+  var d=new Date();
+  return{
+    d:((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate(),
+    t:(d.getHours()<<11)|(d.getMinutes()<<5)|Math.floor(d.getSeconds()/2)
+  };
+}
+
+function crc32b(data){
+  if(!crc32b.t){
+    crc32b.t=new Uint32Array(256);
+    for(var i=0;i<256;i++){var c=i;for(var j=0;j<8;j++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);crc32b.t[i]=c;}
+  }
+  var c=0xFFFFFFFF;
+  for(var i=0;i<data.length;i++) c=crc32b.t[(c^data[i])&0xFF]^(c>>>8);
+  return(c^0xFFFFFFFF)>>>0;
+}
+
+// ── Screens ──
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function newExam(){showScreen('setup-screen');}
+</script>
+</body>
+</html>
